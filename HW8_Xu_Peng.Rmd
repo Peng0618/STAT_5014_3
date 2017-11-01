@@ -1,0 +1,129 @@
+---
+title: "Homework 8"
+author: "Peng Xu"
+date: "2017/10/31"
+output: pdf_document
+---
+
+# Problem 2
+```{r, include=FALSE}
+library(dplyr)
+library(tidytext)
+library(janeaustenr)
+library(igraph)
+library(ggraph)
+
+library(jsonlite)
+library(dplyr)
+library(tidyr)
+library(tidytext)
+library(widyr)
+library(ggplot2)
+library(igraph)
+library(ggraph)
+```
+
+As the data have too many text typos, the cleaning work is done and saved as csv file with Excel. Then my interest is what factors influence the R level. So the people are labelled with three levels. Then the whole table are gathered into pairs of data. Their relationship are drawn with the ggraph package, as shown below.
+
+From the graph, whether people use PC or Mac has no effect on their master levels. But if they have learned some professional software, such as SQL, Minitab, SPSS, people usually have high levels at R. As to their major, stat and finance students do R works better and the average level of masters are higher than those Bachelor¡¯s.
+```{r}
+setwd('D:/Git/STAT_5015_homework/08_text_mining_Rnotebooks_bash_sed_awk')
+
+OriList <- read.table('survey_data.txt', sep="\t")
+OriList2 <- read.csv('TidyData.csv', sep=",", header = FALSE)
+OriList2
+
+OriList2$V1 <- sub("beginner", "Level_1", OriList2$V1)
+OriList2$V1 <- sub("beg/intermediate", "Level_2", OriList2$V1)
+OriList2$V1 <- sub("intermediate", "Level_3", OriList2$V1)
+
+GroupData <- gather(OriList2,Attribute,value,V2:V13)
+GroupData2 <- select(GroupData,-Attribute)
+GroupData3 <- filter(GroupData2, GroupData2$value != "NULL")
+
+bigram_tf_idf <- GroupData3 %>%
+  count(V1, value) %>%
+  bind_tf_idf(value, V1, n) %>%
+  arrange(desc(tf_idf))
+
+bigram_graph <- GroupData3 %>%
+  graph_from_data_frame()
+
+bigram_graph
+
+set.seed(2017)
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+```
+
+
+# Problem 3
+For this problem, it hard for me to modify the analysis structure. So I analyze the connection graph and remove some meaningless keywords to get a more concise graph.
+```{r}
+
+metadata <- fromJSON("https://data.nasa.gov/data.json")
+
+nasa_title <- data_frame(id = metadata$dataset$`_id`$`$oid`, 
+                         title = metadata$dataset$title)
+#nasa_title
+nasa_desc <- data_frame(id = metadata$dataset$`_id`$`$oid`, 
+                        desc = metadata$dataset$description)
+
+nasa_keyword <- data_frame(id = metadata$dataset$`_id`$`$oid`, 
+                           keyword = metadata$dataset$keyword) %>%
+  unnest(keyword)
+
+#nasa_keyword
+
+nasa_title <- nasa_title %>% 
+  unnest_tokens(word, title) %>% 
+  anti_join(stop_words)
+
+nasa_desc <- nasa_desc %>% 
+  unnest_tokens(word, desc) %>% 
+  anti_join(stop_words)
+
+#nasa_title
+
+my_stopwords <- data_frame(word = c(as.character(1:11), 
+                                    "v1", "v03", "l2", "l3", "l4", "v5.2.0", 
+                                    "v003", "v004", "v005", "v006", "v7",
+                                    "2000","total","level","based","degree"))
+
+nasa_title <- nasa_title %>% 
+  anti_join(my_stopwords)
+nasa_desc <- nasa_desc %>% 
+  anti_join(my_stopwords)
+
+nasa_keyword <- nasa_keyword %>% 
+  mutate(keyword = toupper(keyword))
+
+
+title_word_pairs <- nasa_title %>% 
+  pairwise_count(word, id, sort = TRUE, upper = FALSE)
+
+#title_word_pairs
+
+desc_word_pairs <- nasa_desc %>% 
+  pairwise_count(word, id, sort = TRUE, upper = FALSE)
+
+#desc_word_pairs
+
+
+set.seed(1234)
+title_word_pairs %>%
+  filter(n >= 250) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void()
+```
+
+
